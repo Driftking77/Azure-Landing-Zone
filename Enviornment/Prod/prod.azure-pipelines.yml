@@ -1,0 +1,94 @@
+trigger: none
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  WORK_DIR: '$(System.DefaultWorkingDirectory)/Enviornment/Prod'
+  BACKEND_NAME: 'Pipelinetest'
+  RESOURCE_GROUP: 'Pipeline'
+  STORAGE_ACCOUNT: 'pipelinebackend1'
+  CONTAINER_NAME: 'pipeline'
+  FILE_KEY: 'prod.statefile'
+
+stages:
+- stage: TFSEC
+  displayName: TFSEC
+  jobs:
+  - job: tfsec
+    displayName: tfsec
+    steps:
+    - task: tfsec@1
+      inputs:
+        version: 'v1.26.0'
+
+- stage: terraforminit
+  displayName: init
+  jobs:
+  - job: init
+    displayName: init
+    steps:
+    - task: TerraformTaskV4@4
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        workingDirectory: $(WORK_DIR)
+        backendServiceArm: $(BACKEND_NAME)
+        backendAzureRmResourceGroupName: $(RESOURCE_GROUP)
+        backendAzureRmStorageAccountName: $(STORAGE_ACCOUNT)
+        backendAzureRmContainerName: $(CONTAINER_NAME)
+        backendAzureRmKey: $(FILE_KEY)
+
+- stage: plan
+  displayName: terraform plan
+  jobs:
+  - job: plan
+    steps:
+    - task: TerraformTaskV4@4
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        workingDirectory: $(WORK_DIR)
+        backendServiceArm: $(BACKEND_NAME)
+        backendAzureRmResourceGroupName: $(RESOURCE_GROUP)
+        backendAzureRmStorageAccountName: $(STORAGE_ACCOUNT)
+        backendAzureRmContainerName: $(CONTAINER_NAME)
+        backendAzureRmKey: $(FILE_KEY)
+    - task: TerraformTaskV4@4
+      inputs:
+        provider: 'azurerm'
+        command: 'plan'
+        workingDirectory: $(WORK_DIR)
+        environmentServiceNameAzureRM: $(BACKEND_NAME)
+- stage: apply
+  displayName: apply
+  dependsOn: plan
+  jobs:
+  - job: Manualvalidation
+    timeoutInMinutes: 90
+    displayName: Manualvalidation
+    pool: server
+    steps:
+    - task: ManualValidation@1
+      inputs:
+        notifyUsers: 'durgesh@gmail.com'
+        instructions: 'Pls validate the code'
+  - job: apply
+    displayName: apply
+    steps:
+    - task: TerraformTaskV4@4
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        workingDirectory: $(WORK_DIR)
+        backendServiceArm: $(BACKEND_NAME)
+        backendAzureRmResourceGroupName: $(RESOURCE_GROUP)
+        backendAzureRmStorageAccountName: $(STORAGE_ACCOUNT)
+        backendAzureRmContainerName: $(CONTAINER_NAME)
+        backendAzureRmKey: $(FILE_KEY)
+    - task: TerraformTaskV4@4
+      inputs:
+        provider: 'azurerm'
+        command: 'apply'
+        workingDirectory: $(WORK_DIR)
+        environmentServiceNameAzureRM: $(BACKEND_NAME)
